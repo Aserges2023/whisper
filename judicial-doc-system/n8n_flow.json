@@ -1,0 +1,348 @@
+{
+  "name": "ASERGES - Procesamiento Notificaciones Judiciales (Correo Procuradores)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 15,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "mailbox": "INBOX",
+        "options": {
+          "unseen": true
+        }
+      },
+      "id": "imap-trigger",
+      "name": "IMAP - Buzón IONOS",
+      "type": "n8n-nodes-base.imapTrigger",
+      "typeVersion": 1,
+      "position": [300, 300],
+      "credentials": {
+        "imap": {
+          "id": "CONFIGURAR_CREDENCIAL_IMAP",
+          "name": "IONOS IMAP - ASERGES"
+        }
+      },
+      "notes": "Configurar credenciales IMAP de IONOS:\n- Host: imap.ionos.es\n- Puerto: 993\n- SSL: true\n- Usuario: correo@aserges.es\n- Contraseña: (contraseña del buzón)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.from }}",
+              "operation": "contains",
+              "value2": ""
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "filtro-procuradores",
+      "name": "Filtro Lista Blanca Procuradores",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [520, 300],
+      "notes": "CONFIGURAR: Añadir los emails de procuradores autorizados.\nEjemplo de condiciones múltiples:\n- from contains 'procurador1@ejemplo.com'\n- OR from contains 'procurador2@ejemplo.com'\n- OR from contains '@procuradores.es'\n\nModificar las condiciones 'string' para incluir cada email/dominio de procurador."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.attachments && $json.attachments.length > 0 }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "verificar-adjuntos",
+      "name": "¿Tiene adjuntos PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Filtrar solo adjuntos PDF\nconst items = [];\nconst attachments = $input.first().json.attachments || [];\n\nfor (const att of attachments) {\n  const filename = (att.filename || att.fileName || '').toLowerCase();\n  const contentType = (att.contentType || att.mimeType || '').toLowerCase();\n  \n  if (filename.endsWith('.pdf') || contentType.includes('pdf')) {\n    items.push({\n      json: {\n        ...($input.first().json),\n        current_attachment: att,\n        attachment_filename: att.filename || att.fileName,\n        attachment_data: att.content || att.data,\n      },\n      binary: $input.first().binary\n    });\n  }\n}\n\nif (items.length === 0) {\n  // Si no hay PDFs, pasar el item original para notificar\n  items.push({\n    json: {\n      ...($input.first().json),\n      no_pdf: true\n    }\n  });\n}\n\nreturn items;"
+      },
+      "id": "extraer-pdfs",
+      "name": "Extraer adjuntos PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_URL || 'http://IP_PC_WINDOWS:8765/procesar' }}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "archivo",
+              "inputDataFieldName": "attachment_0"
+            },
+            {
+              "name": "origen",
+              "value": "correo"
+            },
+            {
+              "name": "remitente",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "asunto",
+              "value": "={{ $json.subject }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "fullResponse": true
+        }
+      },
+      "id": "enviar-worker",
+      "name": "Enviar PDF al Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1180, 200],
+      "notes": "CONFIGURAR: Reemplazar IP_PC_WINDOWS con la IP local del PC Windows.\nEjemplo: http://192.168.1.100:8765/procesar\n\nAsegurarse de que el firewall de Windows permite conexiones entrantes en el puerto 8765."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body?.estado || $json.estado }}",
+              "operation": "equal",
+              "value2": "vinculado"
+            }
+          ]
+        }
+      },
+      "id": "verificar-resultado",
+      "name": "¿Expediente encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
+        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
+        "subject": "✓ Notificación judicial procesada - {{ $json.body?.metadatos?.tipo_resolucion || 'Documento' }}",
+        "text": "Se ha procesado correctamente una notificación judicial.\n\n📋 DETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Estado: VINCULADO A EXPEDIENTE\n- Expediente: {{ JSON.stringify($json.body?.expediente) || 'N/A' }}\n- Archivo: {{ $json.body?.ruta_archivo || 'N/A' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "options": {}
+      },
+      "id": "email-confirmacion",
+      "name": "Email Confirmación OK",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1620, 100],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_CREDENCIAL_SMTP",
+          "name": "IONOS SMTP - ASERGES"
+        }
+      },
+      "notes": "Configurar credenciales SMTP de IONOS:\n- Host: smtp.ionos.es\n- Puerto: 587\n- SSL/TLS: STARTTLS\n- Usuario: correo@aserges.es\n- Contraseña: (contraseña del buzón)"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
+        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
+        "subject": "⚠️ URGENTE: Notificación judicial PENDIENTE de clasificación",
+        "text": "⚠️ ATENCIÓN: Se ha recibido una notificación judicial que NO se ha podido vincular a ningún expediente.\n\n📋 DETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Partes: {{ JSON.stringify($json.body?.metadatos?.partes) || 'No detectadas' }}\n- Estado: PENDIENTE DE CLASIFICACIÓN MANUAL\n- Archivo guardado en: {{ $json.body?.ruta_archivo || 'C:\\\\Escaner\\\\_Pendientes\\\\' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\n🔴 ACCIÓN REQUERIDA: Revisar el documento y vincularlo manualmente al expediente correspondiente en Mnprogram.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "options": {}
+      },
+      "id": "email-alerta-urgente",
+      "name": "Email Alerta URGENTE (Pendiente)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1620, 340],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_CREDENCIAL_SMTP",
+          "name": "IONOS SMTP - ASERGES"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
+        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
+        "subject": "❌ ERROR: Fallo en procesamiento de notificación judicial",
+        "text": "❌ Se ha producido un error al procesar una notificación judicial.\n\n📋 DETALLES DEL ERROR:\n- Nodo: {{ $json.node || 'Desconocido' }}\n- Error: {{ $json.message || JSON.stringify($json) }}\n- Fecha: {{ new Date().toISOString() }}\n\n🔧 ACCIÓN REQUERIDA: Revisar los logs del sistema y del worker Python.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "options": {}
+      },
+      "id": "email-error",
+      "name": "Email Error",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1400, 520],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_CREDENCIAL_SMTP",
+          "name": "IONOS SMTP - ASERGES"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
+        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
+        "subject": "ℹ️ Email de procurador sin adjuntos PDF",
+        "text": "Se ha recibido un email de un procurador autorizado pero no contiene adjuntos PDF.\n\n📋 DETALLES:\n- Remitente: {{ $json.from }}\n- Asunto: {{ $json.subject }}\n- Fecha: {{ $json.date || new Date().toISOString() }}\n\nPor favor, revise el email manualmente si es necesario.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "options": {}
+      },
+      "id": "email-sin-adjuntos",
+      "name": "Notificar Sin Adjuntos",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [960, 440],
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_CREDENCIAL_SMTP",
+          "name": "IONOS SMTP - ASERGES"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-no-procurador",
+      "name": "No es procurador (ignorar)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [740, 500]
+    }
+  ],
+  "connections": {
+    "IMAP - Buzón IONOS": {
+      "main": [
+        [
+          {
+            "node": "Filtro Lista Blanca Procuradores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Lista Blanca Procuradores": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene adjuntos PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No es procurador (ignorar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene adjuntos PDF?": {
+      "main": [
+        [
+          {
+            "node": "Extraer adjuntos PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notificar Sin Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer adjuntos PDF": {
+      "main": [
+        [
+          {
+            "node": "Enviar PDF al Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar PDF al Worker": {
+      "main": [
+        [
+          {
+            "node": "¿Expediente encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Expediente encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Email Confirmación OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Alerta URGENTE (Pendiente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "ASERGES",
+      "id": "aserges-tag"
+    },
+    {
+      "name": "Judicial",
+      "id": "judicial-tag"
+    },
+    {
+      "name": "Notificaciones",
+      "id": "notificaciones-tag"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-05T00:00:00.000Z",
+  "versionId": "1.0.0"
+}

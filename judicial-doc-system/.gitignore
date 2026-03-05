@@ -1,0 +1,27 @@
+# Variables de entorno (contienen credenciales)
+.env
+
+# Entorno virtual de Python
+venv/
+
+# Archivos de log
+*.log
+
+# Base de datos de hashes procesados
+hashes_procesados.json
+
+# NSSM (se descarga durante la instalación)
+nssm-*/
+nssm.zip
+
+# Archivos de Python compilados
+__pycache__/
+*.pyc
+*.pyo
+
+# Archivos temporales de descargas
+_LexNET_Temp/
+
+# Archivos del sistema operativo
+Thumbs.db
+.DS_Store
