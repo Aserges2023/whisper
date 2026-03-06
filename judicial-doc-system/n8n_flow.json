@@ -2,14 +2,6 @@
   "name": "ASERGES - Procesamiento Notificaciones Judiciales (Correo Procuradores)",
   "nodes": [
     {
-      "parameters": {},
-      "id": "start-node",
-      "name": "Start",
-      "type": "n8n-nodes-base.start",
-      "typeVersion": 1,
-      "position": [100, 300]
-    },
-    {
       "parameters": {
         "pollTimes": {
           "item": [
@@ -33,30 +25,58 @@
       "credentials": {
         "imap": {
           "id": "CONFIGURAR_CREDENCIAL_IMAP",
-          "name": "IONOS IMAP - ASERGES"
+          "name": "IONOS IMAP - santiago@aserges.es"
         }
       },
-      "notes": "Configurar credenciales IMAP de IONOS:\n- Host: imap.ionos.es\n- Puerto: 993\n- SSL: true\n- Usuario: correo@aserges.es\n- Contraseña: (contraseña del buzón)"
+      "notes": "CREDENCIALES IMAP A CONFIGURAR:\n- Host: imap.ionos.es\n- Puerto: 993\n- SSL: true\n- Usuario: santiago@aserges.es\n- Contraseña: Palacios@2024/"
     },
     {
       "parameters": {
         "conditions": {
-          "string": [
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "or",
+          "conditions": [
             {
-              "value1": "={{ $json.from }}",
-              "operation": "contains",
-              "value2": ""
+              "id": "cond-1",
+              "leftValue": "={{ $json.from }}",
+              "rightValue": "procurador@solasortega.com",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "cond-2",
+              "leftValue": "={{ $json.from }}",
+              "rightValue": "procuradoracarmencarrasco@gmail.com",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "cond-3",
+              "leftValue": "={{ $json.from }}",
+              "rightValue": "info@belengoni.com",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
             }
           ]
         },
-        "combineOperation": "any"
+        "looseTypeValidation": true
       },
       "id": "filtro-procuradores",
       "name": "Filtro Lista Blanca Procuradores",
       "type": "n8n-nodes-base.filter",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [520, 300],
-      "notes": "CONFIGURAR: Añadir los emails de procuradores autorizados.\nEjemplo de condiciones múltiples:\n- from contains 'procurador1@ejemplo.com'\n- OR from contains 'procurador2@ejemplo.com'\n- OR from contains '@procuradores.es'\n\nModificar las condiciones 'string' para incluir cada email/dominio de procurador."
+      "notes": "Lista blanca de procuradores configurada:\n- procurador@solasortega.com\n- procuradoracarmencarrasco@gmail.com\n- info@belengoni.com\n\nPara añadir más procuradores, edite las condiciones de este nodo."
     },
     {
       "parameters": {
@@ -77,7 +97,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Filtrar solo adjuntos PDF\nconst items = [];\nconst attachments = $input.first().json.attachments || [];\n\nfor (const att of attachments) {\n  const filename = (att.filename || att.fileName || '').toLowerCase();\n  const contentType = (att.contentType || att.mimeType || '').toLowerCase();\n  \n  if (filename.endsWith('.pdf') || contentType.includes('pdf')) {\n    items.push({\n      json: {\n        ...($input.first().json),\n        current_attachment: att,\n        attachment_filename: att.filename || att.fileName,\n        attachment_data: att.content || att.data,\n      },\n      binary: $input.first().binary\n    });\n  }\n}\n\nif (items.length === 0) {\n  // Si no hay PDFs, pasar el item original para notificar\n  items.push({\n    json: {\n      ...($input.first().json),\n      no_pdf: true\n    }\n  });\n}\n\nreturn items;"
+        "functionCode": "// Filtrar solo adjuntos PDF\nconst items = [];\nconst attachments = $input.first().json.attachments || [];\n\nfor (const att of attachments) {\n  const filename = (att.filename || att.fileName || '').toLowerCase();\n  const contentType = (att.contentType || att.mimeType || '').toLowerCase();\n  \n  if (filename.endsWith('.pdf') || contentType.includes('pdf')) {\n    items.push({\n      json: {\n        ...($input.first().json),\n        current_attachment: att,\n        attachment_filename: att.filename || att.fileName,\n        attachment_data: att.content || att.data,\n      },\n      binary: $input.first().binary\n    });\n  }\n}\n\nif (items.length === 0) {\n  items.push({\n    json: {\n      ...($input.first().json),\n      no_pdf: true\n    }\n  });\n}\n\nreturn items;"
       },
       "id": "extraer-pdfs",
       "name": "Extraer adjuntos PDF",
@@ -88,7 +108,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.WORKER_URL || 'http://IP_PC_WINDOWS:8765/procesar' }}",
+        "url": "http://2.136.66.69:8765/procesar",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -122,7 +142,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [1180, 200],
-      "notes": "CONFIGURAR: Reemplazar IP_PC_WINDOWS con la IP local del PC Windows.\nEjemplo: http://192.168.1.100:8765/procesar\n\nAsegurarse de que el firewall de Windows permite conexiones entrantes en el puerto 8765."
+      "notes": "Worker configurado en IP: 2.136.66.69:8765\nAsegúrese de que el firewall del PC Windows permite conexiones entrantes en el puerto 8765.\nSi la IP cambia, actualice la URL aquí."
     },
     {
       "parameters": {
@@ -144,10 +164,10 @@
     },
     {
       "parameters": {
-        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
-        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
-        "subject": "✓ Notificación judicial procesada - {{ $json.body?.metadatos?.tipo_resolucion || 'Documento' }}",
-        "text": "Se ha procesado correctamente una notificación judicial.\n\n📋 DETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Estado: VINCULADO A EXPEDIENTE\n- Expediente: {{ JSON.stringify($json.body?.expediente) || 'N/A' }}\n- Archivo: {{ $json.body?.ruta_archivo || 'N/A' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "fromEmail": "santiago@aserges.es",
+        "toEmail": "santiago@aserges.es",
+        "subject": "OK - Notificación judicial procesada - {{ $json.body?.metadatos?.tipo_resolucion || 'Documento' }}",
+        "text": "Se ha procesado correctamente una notificación judicial.\n\nDETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Estado: VINCULADO A EXPEDIENTE\n- Expediente: {{ JSON.stringify($json.body?.expediente) || 'N/A' }}\n- Archivo: {{ $json.body?.ruta_archivo || 'N/A' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\nMensaje automático del sistema de gestión documental ASERGES.",
         "options": {}
       },
       "id": "email-confirmacion",
@@ -158,17 +178,17 @@
       "credentials": {
         "smtp": {
           "id": "CONFIGURAR_CREDENCIAL_SMTP",
-          "name": "IONOS SMTP - ASERGES"
+          "name": "IONOS SMTP - santiago@aserges.es"
         }
       },
-      "notes": "Configurar credenciales SMTP de IONOS:\n- Host: smtp.ionos.es\n- Puerto: 587\n- SSL/TLS: STARTTLS\n- Usuario: correo@aserges.es\n- Contraseña: (contraseña del buzón)"
+      "notes": "CREDENCIALES SMTP A CONFIGURAR:\n- Host: smtp.ionos.es\n- Puerto: 587\n- SSL/TLS: STARTTLS\n- Usuario: santiago@aserges.es\n- Contraseña: Palacios@2024/"
     },
     {
       "parameters": {
-        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
-        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
-        "subject": "⚠️ URGENTE: Notificación judicial PENDIENTE de clasificación",
-        "text": "⚠️ ATENCIÓN: Se ha recibido una notificación judicial que NO se ha podido vincular a ningún expediente.\n\n📋 DETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Partes: {{ JSON.stringify($json.body?.metadatos?.partes) || 'No detectadas' }}\n- Estado: PENDIENTE DE CLASIFICACIÓN MANUAL\n- Archivo guardado en: {{ $json.body?.ruta_archivo || 'C:\\\\Escaner\\\\_Pendientes\\\\' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\n🔴 ACCIÓN REQUERIDA: Revisar el documento y vincularlo manualmente al expediente correspondiente en Mnprogram.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "fromEmail": "santiago@aserges.es",
+        "toEmail": "santiago@aserges.es",
+        "subject": "URGENTE - Notificación judicial PENDIENTE de clasificación",
+        "text": "ATENCION: Se ha recibido una notificación judicial que NO se ha podido vincular a ningún expediente.\n\nDETALLES:\n- Origen: Correo de procurador\n- Remitente: {{ $json.body?.remitente || 'N/A' }}\n- NIG: {{ $json.body?.metadatos?.nig || 'No detectado' }}\n- Procedimiento: {{ $json.body?.metadatos?.num_procedimiento || 'No detectado' }}\n- Tipo: {{ $json.body?.metadatos?.tipo_resolucion || 'No detectado' }}\n- Partes: {{ JSON.stringify($json.body?.metadatos?.partes) || 'No detectadas' }}\n- Estado: PENDIENTE DE CLASIFICACION MANUAL\n- Archivo guardado en: {{ $json.body?.ruta_archivo || 'C:\\\\Escaner\\\\_Pendientes\\\\' }}\n- Hash: {{ $json.body?.hash || 'N/A' }}\n- Fecha: {{ $json.body?.timestamp || new Date().toISOString() }}\n\nACCION REQUERIDA: Revisar el documento y vincularlo manualmente al expediente correspondiente en Mnprogram.\n\nMensaje automático del sistema de gestión documental ASERGES.",
         "options": {}
       },
       "id": "email-alerta-urgente",
@@ -179,16 +199,16 @@
       "credentials": {
         "smtp": {
           "id": "CONFIGURAR_CREDENCIAL_SMTP",
-          "name": "IONOS SMTP - ASERGES"
+          "name": "IONOS SMTP - santiago@aserges.es"
         }
       }
     },
     {
       "parameters": {
-        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
-        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
-        "subject": "❌ ERROR: Fallo en procesamiento de notificación judicial",
-        "text": "❌ Se ha producido un error al procesar una notificación judicial.\n\n📋 DETALLES DEL ERROR:\n- Nodo: {{ $json.node || 'Desconocido' }}\n- Error: {{ $json.message || JSON.stringify($json) }}\n- Fecha: {{ new Date().toISOString() }}\n\n🔧 ACCIÓN REQUERIDA: Revisar los logs del sistema y del worker Python.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "fromEmail": "santiago@aserges.es",
+        "toEmail": "santiago@aserges.es",
+        "subject": "ERROR - Fallo en procesamiento de notificación judicial",
+        "text": "Se ha producido un error al procesar una notificación judicial.\n\nDETALLES DEL ERROR:\n- Nodo: {{ $json.node || 'Desconocido' }}\n- Error: {{ $json.message || JSON.stringify($json) }}\n- Fecha: {{ new Date().toISOString() }}\n\nACCION REQUERIDA: Revisar los logs del sistema y del worker Python.\n\nMensaje automático del sistema de gestión documental ASERGES.",
         "options": {}
       },
       "id": "email-error",
@@ -199,16 +219,16 @@
       "credentials": {
         "smtp": {
           "id": "CONFIGURAR_CREDENCIAL_SMTP",
-          "name": "IONOS SMTP - ASERGES"
+          "name": "IONOS SMTP - santiago@aserges.es"
         }
       }
     },
     {
       "parameters": {
-        "fromEmail": "={{ $env.EMAIL_FROM || 'notificaciones@aserges.es' }}",
-        "toEmail": "={{ $env.EMAIL_ADMIN || 'admin@aserges.es' }}",
-        "subject": "ℹ️ Email de procurador sin adjuntos PDF",
-        "text": "Se ha recibido un email de un procurador autorizado pero no contiene adjuntos PDF.\n\n📋 DETALLES:\n- Remitente: {{ $json.from }}\n- Asunto: {{ $json.subject }}\n- Fecha: {{ $json.date || new Date().toISOString() }}\n\nPor favor, revise el email manualmente si es necesario.\n\nEste es un mensaje automático del sistema de gestión documental ASERGES.",
+        "fromEmail": "santiago@aserges.es",
+        "toEmail": "santiago@aserges.es",
+        "subject": "INFO - Email de procurador sin adjuntos PDF",
+        "text": "Se ha recibido un email de un procurador autorizado pero no contiene adjuntos PDF.\n\nDETALLES:\n- Remitente: {{ $json.from }}\n- Asunto: {{ $json.subject }}\n- Fecha: {{ $json.date || new Date().toISOString() }}\n\nPor favor, revise el email manualmente si es necesario.\n\nMensaje automático del sistema de gestión documental ASERGES.",
         "options": {}
       },
       "id": "email-sin-adjuntos",
@@ -219,7 +239,7 @@
       "credentials": {
         "smtp": {
           "id": "CONFIGURAR_CREDENCIAL_SMTP",
-          "name": "IONOS SMTP - ASERGES"
+          "name": "IONOS SMTP - santiago@aserges.es"
         }
       }
     },
@@ -343,6 +363,6 @@
     }
   ],
   "triggerCount": 1,
-  "updatedAt": "2026-03-05T00:00:00.000Z",
-  "versionId": "1.0.0"
+  "updatedAt": "2026-03-06T00:00:00.000Z",
+  "versionId": "2.0.0"
 }
