@@ -1,0 +1,30 @@
+{
+  "imap": {
+    "host": "imap.ionos.es",
+    "port": 993,
+    "user": "santiago@aserges.es",
+    "password": "Palacios@2024/"
+  },
+  "mnprogram": {
+    "url": "https://mnprogramweb.net",
+    "user": "santiago@aserges.es",
+    "password": "Pinillos2024",
+    "empresa": "ASESORES Y ABOGADOS ASERGES SL"
+  },
+  "procuradores_autorizados": [
+    "solasortega.com",
+    "procuradoracarmencarrasco@gmail.com",
+    "belengoni.com",
+    "pazmontero.com"
+  ],
+  "rutas_windows": {
+    "base": "C:\\Users\\santi\\OneDrive - Aserges\\DOCS-MNPROGRAM_1631",
+    "notificaciones": "C:\\Users\\santi\\OneDrive - Aserges\\DOCS-MNPROGRAM_1631\\Notificaciones",
+    "usu2": "C:\\Users\\santi\\OneDrive - Aserges\\DOCS-MNPROGRAM_1631\\Usu2",
+    "trabajo": "C:\\Users\\santi\\OneDrive - Aserges\\judicial_diario"
+  },
+  "mapeo_expedientes_archivo": "mapeos/mapeo_expedientes.json",
+  "openai_api_key_env": "OPENAI_API_KEY",
+  "usar_llm_para_clasificar": true,
+  "modelo_llm": "gpt-4.1-mini"
+}

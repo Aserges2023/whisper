@@ -1,0 +1,38 @@
+{
+  "_descripcion": "Mapeo de número de procedimiento o asunto del correo a carpeta de cliente en Usu2. Se actualiza automáticamente con nuevos expedientes detectados.",
+  "por_procedimiento": {
+    "277/2023": "Vinagres Alaveses, S.L",
+    "253/2021": "Lázaro Vallejo, Beatriz",
+    "197/2017": "Lázaro Vallejo, Beatriz",
+    "1210/2025": "Jimenez Vitoria, Alicia",
+    "366/2025": "Blanco Sanchez, Angel",
+    "56/2024": "Casero Miguel, Oscar",
+    "628/2019": "Calahorra Zapatero, Luis Javier",
+    "135/2021": "Jimenez Vitoria, Alicia",
+    "1497/2025": "The Last One Company, SL",
+    "458/2025": "Frutas Pisón SL",
+    "1147/2026": "Frutas Pisón SL",
+    "651/2023": "Avenida de Colón 3 Decoración, SL",
+    "953/2025": "Jimenez Vitoria, Alicia",
+    "50/2026": "Jimenez Vitoria, Alicia",
+    "1601/2025": "Jimenez Vitoria, Alicia",
+    "990/2025": "Jimenez Vitoria, Alicia",
+    "252/2025": "Jimenez Vitoria, Alicia",
+    "120/2026": "Latorre Galilea, Julio"
+  },
+  "por_asunto_regex": {
+    "(?i)vinagres\\s+alaveses": "Vinagres Alaveses, S.L",
+    "(?i)l[aá]zaro\\s+vallejo": "Lázaro Vallejo, Beatriz",
+    "(?i)jimenez\\s+vitoria": "Jimenez Vitoria, Alicia",
+    "(?i)blanco\\s+sanchez": "Blanco Sanchez, Angel",
+    "(?i)casero\\s+miguel": "Casero Miguel, Oscar",
+    "(?i)calahorra\\s+zapatero": "Calahorra Zapatero, Luis Javier",
+    "(?i)the\\s+last\\s+one": "The Last One Company, SL",
+    "(?i)frutas?\\s+pis[oó]n": "Frutas Pisón SL",
+    "(?i)col[oó]n\\s+3\\s+decoraci": "Avenida de Colón 3 Decoración, SL",
+    "(?i)garc[ií]a\\s+ruiz.*fidel": "Garcia Ruiz, Fidel Pedro",
+    "(?i)fidel.*garc[ií]a\\s+ruiz": "Garcia Ruiz, Fidel Pedro",
+    "(?i)julio\\s+antol[ií]n": "Latorre Galilea, Julio",
+    "(?i)latorre\\s+galilea": "Latorre Galilea, Julio"
+  }
+}
