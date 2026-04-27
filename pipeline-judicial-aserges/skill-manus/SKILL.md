@@ -5,6 +5,17 @@ description: Ejecuta el pipeline judicial diario de ASERGES cada 12h (L-V 8:00 y
 
 # Pipeline Judicial Diario - ASERGES
 
+Automatiza la descarga, clasificación y distribución de notificaciones judiciales recibidas por correo electrónico de procuradores autorizados.
+
+> **Estado (2026-04-27):** Implementada la Opción A de autenticación (Service Account Impersonation / ADC). El pipeline ya no depende de tokens OAuth de usuario que caducan cada 7 días.
+
+## Requisitos previos en el PC Windows
+
+1. Python 3.11+ instalado y en PATH.
+2. Dependencias instaladas: `pip install google-auth google-auth-httplib2 google-api-python-client pdfplumber pypdf`.
+3. Carpeta del pipeline clonada en: `C:\Users\santi\OneDrive - Aserges\judicial_diario\whisper\pipeline-judicial-aserges\`.
+4. Google Cloud CLI instalado y configurado con `configurar_adc_windows.bat` (ver sección Autenticación ADC).
+
 ## Flujo completo (7 pasos)
 
 ### Paso 1: Descargar PDFs de procuradores
@@ -12,25 +23,24 @@ description: Ejecuta el pipeline judicial diario de ASERGES cada 12h (L-V 8:00 y
 Ejecutar el script de descarga IMAP. Buscar correos de las **últimas 12 horas** (o rango indicado por el usuario).
 
 ```bash
-cd /home/ubuntu && python3.11 pipeline-judicial-aserges/scripts/pipeline_judicial.py
+cd "C:\Users\santi\OneDrive - Aserges\judicial_diario\whisper\pipeline-judicial-aserges"
+python scripts\pipeline_judicial.py
 ```
 
 Rango personalizado: `--desde 2026-03-16 --hasta 2026-03-21`
 
-Credenciales IMAP en `scripts/config/config.json`:
+Credenciales IMAP en `config/config.json`:
 - Host: `imap.ionos.es:993`, User: `santiago@aserges.es`
 - Procuradores: `solasortega.com`, `procuradoracarmencarrasco@gmail.com`, `belengoni.com`, `pazmontero.com`
 
 El script descarga PDFs, clasifica (tipo resolución, procedimiento, partes), renombra como `HHhMM - PARTE - PROC - TIPO.pdf`, y copia a:
-- `Notificaciones/{fecha}/` en sandbox y en PC (`/mnt/desktop/DOCS-MNPROGRAM_1631/Notificaciones/`)
-- Subcarpeta del cliente en `Usu2/` usando `mapeos/mapeo_expedientes.json`
-
-Copia al PC: usar `open(dst,"wb").write(open(src,"rb").read())` en Python (no shutil, FUSE es lento).
+- `Notificaciones\{fecha}\` en PC (`C:\Users\santi\OneDrive - Aserges\DOCS-MNPROGRAM_1631\Notificaciones\`)
+- Subcarpeta del cliente en `Usu2\` usando `mapeos\mapeo_expedientes.json`
 
 ### Paso 2: Análisis IA de cada PDF
 
 ```bash
-python3.11 /home/ubuntu/pipeline-judicial-aserges/scripts/analisis_ia_calendar.py --dir /home/ubuntu/Notificaciones/{fecha} --no-agendar
+python scripts\analisis_ia_calendar.py --dir "C:\Users\santi\OneDrive - Aserges\DOCS-MNPROGRAM_1631\Notificaciones\{fecha}" --no-agendar
 ```
 
 Usa GPT-4.1-mini. Devuelve por cada PDF: resumen (1-2 líneas), prioridad (ALTA/MEDIA/BAJA), plazos relevantes.
@@ -43,12 +53,12 @@ Criterios de plazo relevante (solo estos):
 
 Cómputo plazos LEC (arts. 130-131 LEC, 182-183 LOPJ): días hábiles excluyendo sáb/dom, festivos nacionales, La Rioja (9 junio), Semana Santa (Jueves/Viernes Santo), agosto completo inhábil.
 
-Genera: `analisis_ia_resultados/analisis_ia_{fecha}.json` y `.md`
+Genera: `analisis_ia_resultados\analisis_ia_{fecha}.json` y `.md`
 
 ### Paso 3: Generar PDF del informe
 
 ```bash
-manus-md-to-pdf /home/ubuntu/analisis_ia_resultados/analisis_ia_{fecha}.md /home/ubuntu/analisis_ia_resultados/analisis_ia_{fecha}.pdf
+manus-md-to-pdf analisis_ia_resultados\analisis_ia_{fecha}.md analisis_ia_resultados\analisis_ia_{fecha}.pdf
 ```
 
 ### Paso 4: Enviar correo con informe y propuestas de agendación
@@ -61,7 +71,7 @@ Usar Gmail MCP. Construir el cuerpo del correo con:
 5. Adjuntar PDF del informe
 
 ```bash
-manus-mcp-cli tool call gmail_send_messages --server gmail --input '{"messages":[{"subject":"ASERGES - Informe Judicial {fecha} + Propuestas Agendación","to":["santi.palacios.pinillos@gmail.com"],"content":"...","attachments":["/ruta/al/informe.pdf"]}]}'
+manus-mcp-cli tool call gmail_send_messages --server gmail --input '{"messages":[{"subject":"ASERGES - Informe Judicial {fecha} + Propuestas Agendación","to":["santi.palacios.pinillos@gmail.com"],"content":"...","attachments":["C:\\Users\\santi\\OneDrive - Aserges\\judicial_diario\\whisper\\pipeline-judicial-aserges\\analisis_ia_resultados\\analisis_ia_{fecha}.pdf"]}]}'
 ```
 
 Autor: **Asesores y Abogados ASerges SL** (nunca mencionar Manus IA).
@@ -100,23 +110,10 @@ Enviar correo de confirmación al usuario indicando qué eventos se han agendado
 
 ## Gestión de archivos sin mapeo
 
-Si hay PDFs sin carpeta Usu2, incluirlos en el informe como "Pendientes de asignación". El usuario puede actualizar `mapeos/mapeo_expedientes.json` añadiendo:
+Si hay PDFs sin carpeta Usu2, incluirlos en el informe como "Pendientes de asignación". El usuario puede actualizar `mapeos\mapeo_expedientes.json` añadiendo:
 
 ```json
 {"por_procedimiento": {"999/2026": "Nombre Cliente"}}
-```
-
-## Estructura de archivos
-
-```
-pipeline-judicial-aserges/
-├── scripts/
-│   ├── pipeline_judicial.py        # IMAP + clasificación + Notificaciones + Usu2
-│   └── analisis_ia_calendar.py     # Análisis IA + cómputo plazos LEC
-├── config/config.json              # Credenciales IMAP, rutas Windows
-├── mapeos/mapeo_expedientes.json   # Mapeo procedimiento -> carpeta cliente
-├── ejecutar_pipeline.bat           # Lanzador Windows
-└── instalar.bat                    # Instalador dependencias Windows
 ```
 
 ## Autenticación Google Calendar: Modo ADC (Opción A)
@@ -138,20 +135,13 @@ El pipeline soporta dos modos de autenticación para agendar en Google Calendar:
    ```
 4. Establecer variable de entorno permanente:
    ```
-   setx PIPELINE_AUTH_MODE adc
+   activar_modo_adc.bat
    ```
 
 ### Usar modo ADC en análisis IA
 
 ```bash
-python3.11 /home/ubuntu/pipeline-judicial-aserges/scripts/analisis_ia_calendar.py \
-  --dir /home/ubuntu/Notificaciones/{fecha} \
-  --modo-auth adc
-```
-
-O con variable de entorno:
-```bash
-PIPELINE_AUTH_MODE=adc python3.11 .../analisis_ia_calendar.py --dir ...
+python scripts\analisis_ia_calendar.py --dir "C:\Users\santi\OneDrive - Aserges\DOCS-MNPROGRAM_1631\Notificaciones\{fecha}" --modo-auth adc
 ```
 
 ### Verificar ADC
@@ -169,10 +159,10 @@ Salida esperada:
 
 ## Solución de problemas
 
-- **Error IMAP**: Verificar credenciales en config.json
-- **Copia FUSE lenta**: Usar `open/write` byte a byte, no shutil
-- **MCP Calendar/Gmail**: Invocar directamente desde shell, NO desde subprocess Python
-- **PDF sin mapeo**: Añadir en mapeo_expedientes.json
+- **Error IMAP**: Verificar credenciales en `config/config.json`
+- **pdfplumber no instalado**: Ejecutar `pip install pdfplumber`
+- **Carpeta Usu2 no encontrada**: Verificar ruta en `config.json`
+- **PDF sin mapeo**: Añadir entrada en `mapeo_expedientes.json`
 - **Sin correos nuevos**: Enviar correo indicando "Sin notificaciones"
 - **ADC no configurado**: Ejecutar `configurar_adc_windows.bat` y verificar con `python scripts\auth_adc.py`
 - **Error `invalid_grant` OAuth**: Indica que los tokens OAuth de usuario han caducado (modo Testing, 7 días). Migrar a modo ADC con `configurar_adc_windows.bat`.
