@@ -495,7 +495,7 @@ def main():
     print(f"  Directorio: {directorio}")
     print(f"  Agendar Calendar: {'Sí' if agendar else 'No'}")
     print(f"  Modo autenticación: {modo_auth.upper()}")
-    print("="*60) 60)
+    print("="*60)
     
     # Analizar PDFs
     resultados = procesar_directorio(directorio)
