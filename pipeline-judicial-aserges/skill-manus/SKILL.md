@@ -119,6 +119,54 @@ pipeline-judicial-aserges/
 └── instalar.bat                    # Instalador dependencias Windows
 ```
 
+## Autenticación Google Calendar: Modo ADC (Opción A)
+
+El pipeline soporta dos modos de autenticación para agendar en Google Calendar:
+
+| Modo | Cuándo usar | Requisito |
+|:---|:---|:---|
+| `mcp` (por defecto) | Desde Manus Cowork | Cowork activo |
+| `adc` | Desde Windows Task Scheduler o sin Cowork | `configurar_adc_windows.bat` ejecutado una vez |
+
+### Configurar modo ADC (una sola vez por equipo)
+
+1. Instalar Google Cloud CLI: https://cloud.google.com/sdk/docs/install
+2. Pedir al admin de GCP que asigne `roles/iam.serviceAccountTokenCreator` sobre la SA `pipeline-judicial-sa@aserges-pipeline.iam.gserviceaccount.com` a la cuenta `santiago@aserges.es`.
+3. Ejecutar en el PC Windows:
+   ```
+   configurar_adc_windows.bat
+   ```
+4. Establecer variable de entorno permanente:
+   ```
+   setx PIPELINE_AUTH_MODE adc
+   ```
+
+### Usar modo ADC en análisis IA
+
+```bash
+python3.11 /home/ubuntu/pipeline-judicial-aserges/scripts/analisis_ia_calendar.py \
+  --dir /home/ubuntu/Notificaciones/{fecha} \
+  --modo-auth adc
+```
+
+O con variable de entorno:
+```bash
+PIPELINE_AUTH_MODE=adc python3.11 .../analisis_ia_calendar.py --dir ...
+```
+
+### Verificar ADC
+
+```bash
+python scripts\auth_adc.py
+```
+
+Salida esperada:
+```
+✓ Archivo ADC encontrado en disco
+✓ Google Calendar API: OK (N calendarios accesibles)
+✓ Gmail API: OK (cuenta: santiago@aserges.es)
+```
+
 ## Solución de problemas
 
 - **Error IMAP**: Verificar credenciales en config.json
@@ -126,3 +174,5 @@ pipeline-judicial-aserges/
 - **MCP Calendar/Gmail**: Invocar directamente desde shell, NO desde subprocess Python
 - **PDF sin mapeo**: Añadir en mapeo_expedientes.json
 - **Sin correos nuevos**: Enviar correo indicando "Sin notificaciones"
+- **ADC no configurado**: Ejecutar `configurar_adc_windows.bat` y verificar con `python scripts\auth_adc.py`
+- **Error `invalid_grant` OAuth**: Indica que los tokens OAuth de usuario han caducado (modo Testing, 7 días). Migrar a modo ADC con `configurar_adc_windows.bat`.

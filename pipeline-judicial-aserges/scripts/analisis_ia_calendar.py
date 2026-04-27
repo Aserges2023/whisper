@@ -9,7 +9,11 @@ Lee los PDFs ya descargados, los analiza con GPT-4.1-mini para obtener:
   - Plazos relevantes (solo Autos, Decretos, Sentencias) o fechas concretas
 Luego agenda en Google Calendar los plazos/fechas detectados.
 
-Este script se ejecuta desde el sandbox de Manus (con acceso a OpenAI y MCP).
+Modos de autenticación para Google Calendar:
+  --modo-auth mcp   (por defecto) Usa manus-mcp-cli (requiere Manus Cowork)
+  --modo-auth adc   Usa Application Default Credentials con Service Account
+                    Impersonation (Opción A). Requiere haber ejecutado
+                    configurar_adc_windows.bat una vez.
 """
 
 import json
@@ -19,6 +23,10 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Modo de autenticación: 'mcp' (Manus Cowork) o 'adc' (Service Account Impersonation)
+# Se puede sobreescribir con la variable de entorno PIPELINE_AUTH_MODE
+AUTH_MODE = os.environ.get("PIPELINE_AUTH_MODE", "mcp")
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN
@@ -203,17 +211,51 @@ def calcular_fecha_vencimiento(dias_habiles: int, desde: datetime = None) -> str
     return fecha.strftime("%Y-%m-%d")
 
 
-def agendar_en_calendar(evento: dict) -> bool:
-    """Agenda un evento en Google Calendar usando MCP."""
+def agendar_en_calendar(evento: dict, modo_auth: str = None) -> bool:
+    """
+    Agenda un evento en Google Calendar.
+
+    Soporta dos modos de autenticación:
+      - 'mcp': Usa manus-mcp-cli (requiere Manus Cowork activo).
+      - 'adc': Usa Application Default Credentials con Service Account
+               Impersonation (Opción A). No depende de Cowork.
+
+    El modo se determina en este orden de precedencia:
+      1. Parámetro `modo_auth` de esta función.
+      2. Variable de entorno PIPELINE_AUTH_MODE.
+      3. Por defecto: 'mcp'.
+    """
+    modo = (modo_auth or AUTH_MODE or "mcp").lower()
     summary = evento["summary"]
     description = evento.get("description", "")
     start_date = evento["start_date"]  # YYYY-MM-DD
-    
-    # Evento a las 8:00 de la mañana del día indicado
+
+    # ── Modo ADC (Service Account Impersonation) ──────────────────────────────
+    if modo == "adc":
+        try:
+            from auth_adc import crear_evento_calendar, adc_disponible
+            if not adc_disponible():
+                print("  Calendar ADC ERROR: ADC no configurado. Ejecuta configurar_adc_windows.bat")
+                return False
+            result = crear_evento_calendar(
+                summary=summary,
+                description=description,
+                start_date=start_date,
+            )
+            if result:
+                print(f"  Calendar ADC OK: {summary} -> {start_date}")
+                return True
+            else:
+                print(f"  Calendar ADC ERROR: la función crear_evento_calendar devolvió None")
+                return False
+        except Exception as e:
+            print(f"  Calendar ADC ERROR: {e}")
+            return False
+
+    # ── Modo MCP (Manus Cowork) ───────────────────────────────────────────────
     start_time = f"{start_date}T08:00:00+01:00"
     end_time = f"{start_date}T08:30:00+01:00"
-    
-    # Recordatorio 1 día antes y 2 horas antes
+
     input_json = json.dumps({
         "events": [{
             "summary": summary,
@@ -223,21 +265,21 @@ def agendar_en_calendar(evento: dict) -> bool:
             "reminders": [1440, 120]  # 24h y 2h antes
         }]
     })
-    
+
     cmd = f"manus-mcp-cli tool call google_calendar_create_events --server google-calendar --input '{input_json}'"
-    
+
     try:
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=30
         )
         if result.returncode == 0:
-            print(f"  Calendar OK: {summary} -> {start_date}")
+            print(f"  Calendar MCP OK: {summary} -> {start_date}")
             return True
         else:
-            print(f"  Calendar ERROR: {result.stderr[:200]}")
+            print(f"  Calendar MCP ERROR: {result.stderr[:200]}")
             return False
     except Exception as e:
-        print(f"  Calendar ERROR: {e}")
+        print(f"  Calendar MCP ERROR: {e}")
         return False
 
 
@@ -423,6 +465,13 @@ def main():
     parser.add_argument("--fecha", type=str, default="", help="Etiqueta de fecha para el informe")
     parser.add_argument("--agendar", action="store_true", default=True, help="Agendar plazos en Google Calendar")
     parser.add_argument("--no-agendar", action="store_true", help="No agendar en Calendar")
+    parser.add_argument(
+        "--modo-auth",
+        choices=["mcp", "adc"],
+        default=os.environ.get("PIPELINE_AUTH_MODE", "mcp"),
+        help="Modo de autenticación para Google Calendar: 'mcp' (Manus Cowork) o 'adc' (Service Account Impersonation). "
+             "Por defecto: valor de PIPELINE_AUTH_MODE o 'mcp'."
+    )
     args = parser.parse_args()
     
     # Determinar directorio
@@ -439,12 +488,14 @@ def main():
     
     fecha_str = args.fecha or directorio.name
     agendar = not args.no_agendar
+    modo_auth = args.modo_auth
     
-    print("=" * 60)
+    print("="*60)
     print("  ANÁLISIS IA DE DOCUMENTOS JUDICIALES - ASERGES")
     print(f"  Directorio: {directorio}")
     print(f"  Agendar Calendar: {'Sí' if agendar else 'No'}")
-    print("=" * 60)
+    print(f"  Modo autenticación: {modo_auth.upper()}")
+    print("="*60) 60)
     
     # Analizar PDFs
     resultados = procesar_directorio(directorio)
@@ -454,9 +505,9 @@ def main():
         agendables = [r for r in resultados if r.get("agendado") and "evento_calendar" in r]
         if agendables:
             print(f"\n{'='*60}")
-            print(f"Agendando {len(agendables)} eventos en Google Calendar...")
+            print(f"Agendando {len(agendables)} eventos en Google Calendar (modo: {modo_auth.upper()})...")
             for r in agendables:
-                ok = agendar_en_calendar(r["evento_calendar"])
+                ok = agendar_en_calendar(r["evento_calendar"], modo_auth=modo_auth)
                 r["calendar_ok"] = ok
         else:
             print("\nNo hay plazos relevantes que agendar.")

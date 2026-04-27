@@ -9,3 +9,5 @@ thumbs.db
 .DS_Store
 .idea
 
+pipeline-judicial-aserges/config/config.json
+pipeline-judicial-aserges/config/.env
